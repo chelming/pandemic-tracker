@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pandemic S2 — Infection Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0d0f12; --sf:#141720; --sf2:#1c2030;
+  --br:#2a2f42; --tx:#e0e4f0; --mu:#6b7280;
+  --ye:#f5c842; --yd:#3a2e0a;
+  --bl:#4a9eff; --bld:#0d2040;
+  --bk:#d4d4d4; --bkd:#111111;
+  --rd:#ff4444; --rdd:#3a0a0a;
+  --dn:#ff4444; --wa:#ff9500; --ok:#22c55e;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--tx);
+  font-family: 'Share Tech Mono', monospace;
+  min-height: 100vh; padding: 14px 14px 32px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* CONNECTION STATUS */
+.conn-bar {
+  display: flex; align-items: center; gap: 8px;
+  font-size: .65rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--mu); margin-bottom: 10px; padding: 7px 10px;
+  background: var(--sf); border: 1px solid var(--br);
+}
+.conn-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: var(--mu); transition: background .3s;
+}
+.conn-dot.connected    { background: var(--ok); }
+.conn-dot.connecting   { background: var(--wa); animation: blink 1s infinite; }
+.conn-dot.disconnected { background: var(--dn); }
+.conn-clients { margin-left: auto; color: var(--mu); }
+
+/* HEADER */
+.hdr { text-align: center; margin-bottom: 14px; }
+.hdr h1 { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: clamp(1.5rem,5vw,2.2rem); letter-spacing: .15em; text-transform: uppercase; }
+.hdr h1 em { color: var(--dn); font-style: normal; }
+.hdr p { font-size: .72rem; color: var(--mu); letter-spacing: .16em; margin-top: 3px; }
+
+/* ACTION BAR */
+.action-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  background: var(--sf);
+  border: 1px solid var(--br);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.epidemic-btn {
+  font-family: 'Oswald', sans-serif; font-weight: 700;
+  font-size: clamp(1rem,3.5vw,1.2rem); letter-spacing: .12em; text-transform: uppercase;
+  padding: 14px 10px; background: transparent;
+  border: 2px solid var(--dn); color: var(--dn); cursor: pointer;
+  transition: all .18s; position: relative; overflow: hidden;
+  min-height: 56px; width: 100%;
+}
+.epidemic-btn::before {
+  content: ''; position: absolute; inset: 0;
+  background: var(--dn); transform: scaleX(0); transform-origin: left;
+  transition: transform .18s; z-index: 0;
+}
+.epidemic-btn:active::before, .epidemic-btn:hover::before { transform: scaleX(1); }
+.epidemic-btn:active, .epidemic-btn:hover { color: #fff; }
+.epidemic-btn span { position: relative; z-index: 1; }
+.turn-center { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0 4px; }
+.turn-label { font-size: .6rem; color: var(--mu); letter-spacing: .14em; text-transform: uppercase; }
+.turn-num { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 1.8rem; color: var(--ye); line-height: 1; }
+.end-turn-btn {
+  font-family: 'Oswald', sans-serif; font-weight: 700;
+  font-size: clamp(1rem,3.5vw,1.2rem); letter-spacing: .12em; text-transform: uppercase;
+  padding: 14px 10px; background: transparent;
+  border: 2px solid var(--ok); color: var(--ok); cursor: pointer;
+  transition: all .18s; min-height: 56px; width: 100%;
+}
+.end-turn-btn:active, .end-turn-btn:hover { background: var(--ok); color: #000; }
+@keyframes pulse-turn {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+  50%       { box-shadow: 0 0 8px 3px rgba(34,197,94,0.45); }
+}
+.end-turn-btn.pulse { animation: pulse-turn 1.2s ease-in-out infinite; }
+
+/* STATS BAR */
+.stats-bar {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  background: var(--sf2); border: 1px solid var(--br); margin-bottom: 12px;
+}
+@media (min-width: 500px) { .stats-bar { grid-template-columns: repeat(4, 1fr); } }
+.stat {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 10px 12px; border-right: 1px solid var(--br); border-bottom: 1px solid var(--br);
+}
+.stat:nth-child(2n) { border-right: none; }
+@media (min-width: 500px) {
+  .stat:nth-child(2n) { border-right: 1px solid var(--br); }
+  .stat:last-child { border-right: none; }
+  .stat { border-bottom: none; }
+}
+.stat-lbl { font-size: .58rem; color: var(--mu); letter-spacing: .1em; text-transform: uppercase; line-height: 1.3; }
+.stat-val { font-size: 1.05rem; }
+.col-rate { color: var(--bl); }
+.col-epi  { color: var(--wa); }
+.col-new  { color: var(--ye); }
+.col-low  { color: var(--ok); }
+.col-mid  { color: var(--wa); }
+.col-high { color: var(--dn); }
+
+/* PIP KEY */
+.pip-key { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-bottom: 12px; font-size: .68rem; color: var(--mu); letter-spacing: .08em; }
+.pk-i { display: flex; align-items: center; gap: 6px; }
+.pk-dot { width: 13px; height: 13px; border-radius: 50%; border: 2px solid; flex-shrink: 0; }
+
+/* CITY GRID */
+.city-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 600px) { .city-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px)  { .city-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1200px) { .city-grid { grid-template-columns: repeat(4, 1fr); } }
+
+/* SECTIONS */
+.section { border: 1px solid var(--br); padding: 14px; position: relative; }
+.section::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; }
+.section.yellow { background: linear-gradient(160deg, var(--sf), var(--yd)); }
+.section.yellow::before { background: var(--ye); }
+.section.blue { background: linear-gradient(160deg, var(--sf), var(--bld)); }
+.section.blue::before { background: var(--bl); }
+.section.black { background: linear-gradient(160deg, var(--sf), var(--bkd)); }
+.section.black::before { background: var(--bk); }
+.section.red { background: linear-gradient(160deg, var(--sf), var(--rdd)); }
+.section.red::before { background: var(--rd); }
+.sec-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--br); }
+.sec-title { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 1rem; letter-spacing: .16em; text-transform: uppercase; }
+.section.yellow .sec-title { color: var(--ye); }
+.section.blue   .sec-title { color: var(--bl); }
+.section.black  .sec-title { color: var(--bk); }
+.section.red    .sec-title { color: var(--rd); }
+.sec-count { font-size: .65rem; color: var(--mu); }
+
+/* CITY ROW */
+.city-row { display: flex; align-items: center; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.05); gap: 8px; }
+.city-row:last-child { border-bottom: none; }
+.c-name { font-size: 1rem; letter-spacing: .03em; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+.pips { display: flex; gap: 7px; flex-shrink: 0; }
+.pip { width: 26px; height: 26px; border-radius: 50%; border: 2px solid; cursor: pointer; transition: transform .1s; flex-shrink: 0; }
+.pip:active { transform: scale(1.3); }
+.pip:hover  { transform: scale(1.2); }
+.section.yellow .pip        { border-color: var(--ye); background: transparent; }
+.section.yellow .pip.cur    { background: var(--ye); }
+.section.yellow .pip.prv    { background: #6b5a10; border-color: #6b5a10; }
+.section.blue .pip          { border-color: var(--bl); background: transparent; }
+.section.blue .pip.cur      { background: var(--bl); }
+.section.blue .pip.prv      { background: #1a3d66; border-color: #1a3d66; }
+.section.black .pip         { border-color: #777; background: transparent; }
+.section.black .pip.cur     { background: var(--bk); }
+.section.black .pip.prv     { background: #444; border-color: #444; }
+.section.red .pip           { border-color: var(--rd); background: transparent; }
+.section.red .pip.cur       { background: var(--rd); }
+.section.red .pip.prv       { background: #6b1010; border-color: #6b1010; }
+.pip.inoc { opacity: .3; background: #555 !important; border-color: #555 !important; position: relative; }
+.pip.inoc::after { content: '✕'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: .65rem; color: #fff; }
+.inoc-btn { font-size: .65rem; padding: 2px 6px; border: 1px solid var(--mu); background: transparent; color: var(--mu); border-radius: 3px; cursor: pointer; flex-shrink: 0; }
+.inoc-btn:hover { border-color: var(--fg); color: var(--fg); }
+/* BOX 6 */
+.box6-section { border: 1px solid var(--br); padding: 14px; margin-top: 0; }
+.box6-title { font-family: 'Oswald', sans-serif; font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; color: var(--mu); margin-bottom: 10px; }
+.box6-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.box6-tag { font-size: .78rem; padding: 2px 8px; border-radius: 12px; border: 1px solid; }
+.box6-tag.yellow { border-color: var(--ye); color: var(--ye); }
+.box6-tag.blue   { border-color: var(--bl); color: var(--bl); }
+.box6-tag.black  { border-color: #777;      color: #aaa; }
+.box6-tag.red    { border-color: var(--rd); color: var(--rd); }
+.odds-pill {
+  font-size: .78rem; font-family: 'Oswald', sans-serif; font-weight: 600;
+  letter-spacing: .04em; padding: 3px 8px; border-radius: 3px;
+  flex-shrink: 0; min-width: 46px; text-align: center;
+}
+.odds-low  { background: rgba(34,197,94,.12);  color: var(--ok); }
+.odds-mid  { background: rgba(255,149,0,.14);  color: var(--wa); }
+.odds-high { background: rgba(255,68,68,.16);  color: var(--dn); }
+.odds-zero { background: rgba(107,114,128,.1); color: var(--mu); }
+
+/* SETTINGS */
+.settings-section { margin-top: 20px; border: 1px solid var(--br); background: var(--sf); }
+.settings-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 16px; cursor: pointer; user-select: none;
+  font-family: 'Oswald', sans-serif; font-weight: 600;
+  font-size: .88rem; letter-spacing: .14em; text-transform: uppercase; color: var(--mu);
+}
+.settings-toggle:hover { color: var(--tx); }
+.settings-toggle .arrow { transition: transform .2s; font-style: normal; }
+.settings-section.open .settings-toggle .arrow { transform: rotate(180deg); }
+.settings-body { display: none; padding: 14px 16px; border-top: 1px solid var(--br); }
+.settings-section.open .settings-body { display: block; }
+.settings-fields { display: flex; flex-wrap: wrap; gap: 14px 24px; margin-bottom: 16px; }
+.sb-field { display: flex; flex-direction: column; gap: 4px; }
+.sb-label { font-size: .66rem; color: var(--mu); letter-spacing: .12em; text-transform: uppercase; }
+.sb-field input[type=number] {
+  background: var(--bg); border: 1px solid var(--br);
+  color: var(--tx); font-family: 'Share Tech Mono', monospace;
+  font-size: 1.1rem; width: 72px; padding: 8px; text-align: center;
+}
+.sb-field input:focus { outline: none; border-color: var(--bl); }
+.settings-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { font-family: 'Share Tech Mono', monospace; font-size: .76rem; letter-spacing: .1em; text-transform: uppercase; padding: 10px 16px; background: transparent; border: 1px solid var(--br); color: var(--mu); cursor: pointer; transition: all .2s; }
+.btn:hover, .btn:active { border-color: var(--tx); color: var(--tx); }
+.btn.danger { border-color: rgba(255,68,68,.4); color: rgba(255,68,68,.6); }
+.btn.danger:hover { border-color: var(--dn); color: var(--dn); }
+
+/* MODAL */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.82); z-index: 100; display: none; align-items: flex-start; justify-content: center; padding: 20px 14px; overflow-y: auto; }
+.overlay.open { display: flex; }
+.modal { background: var(--sf); border: 1px solid var(--br); padding: 20px; width: 100%; max-width: 500px; margin: auto; position: relative; max-height: 92vh; overflow-y: auto; }
+.modal-title { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 1rem; letter-spacing: .16em; text-transform: uppercase; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--br); padding-right: 36px; }
+.modal-x { position: absolute; top: 14px; right: 14px; background: none; border: none; color: var(--mu); font-size: 1.2rem; cursor: pointer; padding: 4px 9px; }
+.modal-x:hover { color: var(--tx); }
+.edit-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+.edit-row:last-child { border-bottom: none; }
+.e-name { flex: 1; background: var(--bg); border: 1px solid var(--br); color: var(--tx); font-family: 'Share Tech Mono', monospace; font-size: .82rem; padding: 7px 8px; min-width: 0; }
+.e-name:focus { outline: none; border-color: var(--bl); }
+.e-color { background: var(--bg); border: 1px solid var(--br); color: var(--tx); font-family: 'Share Tech Mono', monospace; font-size: .75rem; padding: 7px 5px; }
+.count-ctrl { display: flex; align-items: center; gap: 4px; }
+.cnt-btn { width: 28px; height: 28px; background: var(--br); border: none; color: var(--tx); cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; }
+.cnt-btn:hover { background: var(--mu); }
+.cnt-val { font-size: .9rem; min-width: 18px; text-align: center; }
+.del-btn { background: none; border: none; color: var(--dn); cursor: pointer; font-size: .8rem; padding: 4px 7px; opacity: .45; }
+.del-btn:hover { opacity: 1; }
+.section-lbl { font-size: .65rem; color: var(--mu); letter-spacing: .12em; text-transform: uppercase; margin: 14px 0 8px; }
+.add-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.add-form label { font-size: .64rem; color: var(--mu); letter-spacing: .1em; display: flex; flex-direction: column; gap: 3px; }
+.add-form input, .add-form select { background: var(--bg); border: 1px solid var(--br); color: var(--tx); font-family: 'Share Tech Mono', monospace; font-size: .85rem; padding: 7px; }
+.add-form input[type=text] { width: 130px; }
+.add-form input[type=number] { width: 54px; }
+.add-form input:focus, .add-form select:focus { outline: none; border-color: var(--bl); }
+.add-btn { font-family: 'Share Tech Mono', monospace; font-size: .72rem; letter-spacing: .1em; padding: 8px 14px; background: transparent; border: 1px solid var(--ok); color: var(--ok); cursor: pointer; text-transform: uppercase; }
+.add-btn:hover { background: var(--ok); color: #000; }
+.save-btn { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: .92rem; letter-spacing: .14em; text-transform: uppercase; padding: 12px 20px; background: var(--bl); border: none; color: #fff; cursor: pointer; margin-top: 16px; display: block; width: 100%; }
+.save-btn:hover { opacity: .85; }
+
+#flash { position: fixed; inset: 0; background: rgba(255,68,68,.13); pointer-events: none; opacity: 0; transition: opacity .3s; z-index: 200; }
+#flash.on { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="flash"></div>
+
+<div class="conn-bar">
+  <div class="conn-dot connecting" id="conn-dot"></div>
+  <span id="conn-label">Connecting...</span>
+  <span class="conn-clients" id="conn-clients"></span>
+</div>
+
+<div class="hdr">
+  <h1>PANDEMIC <em>//</em> S2</h1>
+  <p>INFECTION TRACKER — YEAR 71</p>
+</div>
+
+<div class="action-bar">
+  <button class="epidemic-btn" onclick="doEpidemic()"><span>⚠ Epidemic</span></button>
+  <div class="turn-center">
+    <div class="turn-label">Turn</div>
+    <div class="turn-num" id="turn-num">1</div>
+  </div>
+  <button class="end-turn-btn" id="end-turn-btn" onclick="endTurn()">End Turn →</button>
+</div>
+
+<div class="stats-bar">
+  <div class="stat"><div class="stat-lbl">Infection Rate</div><div class="stat-val col-rate" id="st-rate">2</div></div>
+  <div class="stat"><div class="stat-lbl">Epidemics Drawn</div><div class="stat-val col-epi" id="st-epi">0 / 7</div></div>
+  <div class="stat"><div class="stat-lbl">Turns → New Cards</div><div class="stat-val col-new" id="st-new">—</div></div>
+  <div class="stat"><div class="stat-lbl">P(Epidemic This Turn)</div><div class="stat-val" id="st-pepi">—</div></div>
+</div>
+
+<div class="pip-key">
+  <div class="pk-i"><div class="pk-dot" style="border-color:#6b7280;background:transparent"></div>Not drawn</div>
+  <div class="pk-i"><div class="pk-dot" style="border-color:#f5c842;background:#f5c842"></div>This round</div>
+  <div class="pk-i"><div class="pk-dot" style="border-color:#6b5a10;background:#6b5a10"></div>Previous (top of deck)</div>
+</div>
+
+<div class="city-grid" id="city-grid"></div>
+<div id="box6-section" class="box6-section" style="display:none"></div>
+
+<div class="settings-section" id="settings-section">
+  <div class="settings-toggle" onclick="toggleSettings()">
+    <span>Settings</span>
+    <em class="arrow">▾</em>
+  </div>
+  <div class="settings-body">
+    <div class="settings-fields">
+      <div class="sb-field"><div class="sb-label">Players</div><input type="number" id="inp-players" min="1" max="4" value="3" oninput="onSetup()"></div>
+      <div class="sb-field"><div class="sb-label">Player Cards</div><input type="number" id="inp-cards" min="1" max="150" value="50" oninput="onSetup()"></div>
+      <div class="sb-field"><div class="sb-label">Epidemics in Deck</div><input type="number" id="inp-epis" min="1" max="8" value="7" oninput="onSetup()"></div>
+    </div>
+    <div class="settings-btns">
+      <button class="btn" onclick="openModal()">⚙ Edit Cities</button>
+      <button class="btn danger" onclick="fullReset()">Full Reset</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modal">
+  <div class="modal">
+    <div class="modal-title">Edit Cities</div>
+    <button class="modal-x" onclick="closeModal()">✕</button>
+    <div id="edit-list"></div>
+    <div class="section-lbl">Add New City</div>
+    <div class="add-form">
+      <label>NAME<input type="text" id="nc-name" placeholder="City name" maxlength="30"></label>
+      <label>COLOR
+        <select id="nc-color">
+          <option value="yellow">Yellow</option>
+          <option value="blue">Blue</option>
+          <option value="black">Black</option>
+          <option value="red">Red</option>
+        </select>
+      </label>
+      <label>CARDS<input type="number" id="nc-count" min="1" max="5" value="1"></label>
+      <button class="add-btn" onclick="addCity()">+ Add</button>
+    </div>
+    <button class="save-btn" onclick="saveModal()">Save & Close</button>
+  </div>
+</div>
+
+<script>
+// ── Constants ─────────────────────────────────────────────────────
+
+const RATES = [2, 2, 2, 3, 3, 4, 4, 5];
+
+const DEFAULTS = [
+  {id:'y_jack',name:'Jacksonville',  color:'yellow',count:3},
+  {id:'y_sp',  name:'São Paulo',     color:'yellow',count:3},
+  {id:'y_lag', name:'Lagos',         color:'yellow',count:3},
+  {id:'y_ba',  name:'Buenos Aires',  color:'yellow',count:2},
+  {id:'y_mc',  name:'Mexico City',   color:'yellow',count:1},
+  {id:'y_san', name:'Santiago',      color:'yellow',count:1},
+  {id:'b_ny',  name:'New York',      color:'blue',  count:3},
+  {id:'b_wa',  name:'Washington',    color:'blue',  count:3},
+  {id:'b_lon', name:'London',        color:'blue',  count:2},
+  {id:'b_den', name:'Denver',        color:'blue',  count:2},
+  {id:'b_chi', name:'Chicago',       color:'blue',  count:2},
+  {id:'b_par', name:'Paris',         color:'blue',  count:2},
+  {id:'b_atl', name:'Atlanta',       color:'blue',  count:1},
+  {id:'k_ist', name:'Istanbul',      color:'black', count:3},
+  {id:'k_tri', name:'Tripoli',       color:'black', count:3},
+  {id:'k_chi', name:'Black Chicago', color:'black', count:2},
+];
+
+// ── State ─────────────────────────────────────────────────────────
+
+let cities = DEFAULTS.map(x => ({...x}));
+let pips       = {};
+let inoculated = {};
+let setup  = { players:3, totalCards:50, totalEpidemics:7, cardsDrawn:0, epidemicsDrawn:0, turn:1 };
+let buf    = [];
+
+function syncPips() {
+  cities.forEach(c => {
+    if (!pips[c.id] || pips[c.id].length !== c.count)
+      pips[c.id] = Array(c.count).fill(0);
+  });
+}
+syncPips();
+
+function getFullState() {
+  return { cities, pips, inoculated, setup };
+}
+
+function applyState(s) {
+  if (!s) return;
+  if (s.cities)     cities     = s.cities;
+  if (s.pips)       pips       = s.pips;
+  if (s.inoculated) inoculated = s.inoculated;
+  if (s.setup)      setup      = {...setup, ...s.setup};
+  syncPips();
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────
+
+let ws = null;
+let reconnectTimer = null;
+
+function wsConnect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url   = `${proto}://${location.host}`;
+
+  setConnStatus('connecting', 'Connecting...');
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    setConnStatus('connected', 'Connected');
+    clearTimeout(reconnectTimer);
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'state') {
+        applyState(msg.payload);
+        renderAll();
+      }
+    } catch(err) {}
+  };
+
+  ws.onclose = () => {
+    setConnStatus('disconnected', 'Disconnected — retrying...');
+    reconnectTimer = setTimeout(wsConnect, 3000);
+  };
+
+  ws.onerror = () => {
+    ws.close();
+  };
+}
+
+function wsSend(state) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'state', payload: state }));
+  }
+}
+
+function setConnStatus(status, label) {
+  const dot = document.getElementById('conn-dot');
+  const lbl = document.getElementById('conn-label');
+  dot.className = `conn-dot ${status}`;
+  lbl.textContent = label;
+}
+
+// ── Actions ───────────────────────────────────────────────────────
+
+function push() {
+  const s = getFullState();
+  wsSend(s);
+  renderAll();
+}
+
+function clickPip(id, idx) {
+  if (!pips[id]) return;
+  if (pips[id][idx] === -1) {
+    pips[id][idx] = 0; // restore from box 6
+  } else {
+    pips[id][idx] = pips[id][idx] === 1 ? 0 : 1;
+  }
+  if (setup.cardsDrawn > 0) {
+    const anyChecked = cities.some(c => (pips[c.id]||[]).some(v => v === 1));
+    document.getElementById('end-turn-btn').classList.toggle('pulse', anyChecked);
+  }
+  push();
+}
+
+function inoculate(cityId) {
+  const arr = pips[cityId];
+  if (!arr) return;
+  // Prefer deepest stratum (highest pip value), then unseen
+  let bestIdx = -1, bestVal = -Infinity;
+  arr.forEach((v, i) => { if (v >= 2 && v > bestVal) { bestVal = v; bestIdx = i; } });
+  if (bestIdx === -1) bestIdx = arr.indexOf(0);
+  if (bestIdx === -1) return; // all already inoculated
+  arr[bestIdx] = -1;
+  push();
+}
+
+function doEpidemic() {
+  setup.epidemicsDrawn = Math.min(setup.epidemicsDrawn + 1, setup.totalEpidemics);
+  cities.forEach(c => {
+    if (!pips[c.id]) return;
+    pips[c.id] = pips[c.id].map(v => v === -1 ? -1 : v === 0 ? 0 : v === 1 ? 2 : v + 1);
+  });
+  const fl = document.getElementById('flash');
+  fl.classList.add('on'); setTimeout(() => fl.classList.remove('on'), 600);
+  push();
+}
+
+function endTurn() {
+  setup.turn++;
+  setup.cardsDrawn = Math.min(setup.cardsDrawn + 2, setup.totalCards);
+  document.getElementById('end-turn-btn').classList.remove('pulse');
+  push();
+}
+
+function onSetup() {
+  setup.players        = parseInt(document.getElementById('inp-players').value) || 3;
+  setup.totalCards     = parseInt(document.getElementById('inp-cards').value)   || 50;
+  setup.totalEpidemics = parseInt(document.getElementById('inp-epis').value)    || 7;
+  push();
+}
+
+function fullReset() {
+  if (!confirm('Reset all pip states and turn tracking? (City list is kept)')) return;
+  setup.cardsDrawn = 0; setup.epidemicsDrawn = 0; setup.turn = 1;
+  cities.forEach(c => { pips[c.id] = Array(c.count).fill(0).map((_,i) => i < ((pips[c.id]||[]).filter(v=>v===-1).length) ? -1 : 0); });
+  push();
+}
+
+function toggleSettings() {
+  document.getElementById('settings-section').classList.toggle('open');
+}
+
+// ── Modal ─────────────────────────────────────────────────────────
+
+function openModal() {
+  buf = cities.map(c => ({...c}));
+  renderModal();
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+function renderModal() {
+  document.getElementById('edit-list').innerHTML = buf.map((c, i) => `
+    <div class="edit-row">
+      <input class="e-name" value="${c.name.replace(/"/g,'&quot;')}" oninput="buf[${i}].name=this.value">
+      <select class="e-color" onchange="buf[${i}].color=this.value">
+        <option value="yellow"${c.color==='yellow'?' selected':''}>YLW</option>
+        <option value="blue"${c.color==='blue'?' selected':''}>BLU</option>
+        <option value="black"${c.color==='black'?' selected':''}>BLK</option>
+      </select>
+      <div class="count-ctrl">
+        <button class="cnt-btn" onclick="modCount(${i},-1)">−</button>
+        <span class="cnt-val">${c.count}</span>
+        <button class="cnt-btn" onclick="modCount(${i},+1)">+</button>
+      </div>
+      <button class="del-btn" onclick="delCity(${i})">✕</button>
+    </div>
+  `).join('');
+}
+
+function modCount(i, d) { buf[i].count = Math.max(1, Math.min(5, buf[i].count + d)); renderModal(); }
+function delCity(i)     { if (!confirm(`Remove ${buf[i].name}?`)) return; buf.splice(i,1); renderModal(); }
+
+function addCity() {
+  const name  = document.getElementById('nc-name').value.trim();
+  const color = document.getElementById('nc-color').value;
+  const count = parseInt(document.getElementById('nc-count').value) || 1;
+  if (!name) { alert('Enter a city name'); return; }
+  buf.push({ id:'custom_'+Date.now(), name, color, count });
+  document.getElementById('nc-name').value = '';
+  renderModal();
+}
+
+function saveModal() {
+  const newPips = {};
+  buf.forEach(c => {
+    const old = pips[c.id] || [];
+    const np  = Array(c.count).fill(0);
+    for (let i = 0; i < Math.min(old.length, c.count); i++) np[i] = old[i];
+    newPips[c.id] = np;
+  });
+  cities = buf.map(c => ({...c}));
+  pips   = newPips;
+  closeModal();
+  push();
+}
+
+// ── Math ──────────────────────────────────────────────────────────
+
+function logC(n, k) {
+  if (k < 0 || k > n) return -Infinity;
+  if (k === 0 || k === n) return 0;
+  k = Math.min(k, n-k);
+  let r = 0;
+  for (let i = 0; i < k; i++) r += Math.log(n-i) - Math.log(i+1);
+  return r;
+}
+
+function pNot(pool, cityCards, draws) {
+  if (cityCards <= 0 || draws <= 0) return 1;
+  if (draws >= pool || cityCards >= pool) return 0;
+  const lp = logC(pool - cityCards, draws) - logC(pool, draws);
+  return isFinite(lp) ? Math.exp(lp) : 0;
+}
+
+function deckStats() {
+  let P = 0, U = 0;
+  cities.forEach(c => (pips[c.id]||[]).forEach(v => { if(v>=2) P++; else if(v===0) U++; }));
+  return {P, U};
+}
+
+function cityProb(id) {
+  const cp      = pips[id] || [];
+  const R       = RATES[Math.min(setup.epidemicsDrawn, RATES.length-1)];
+  const allPips = cities.flatMap(c => pips[c.id] || []);
+  const maxS    = allPips.reduce((m, v) => v >= 2 ? Math.max(m, v) : m, 1);
+
+  let cardsLeft = R;
+  let pNoCity   = 1;
+
+  // Draw through strata in order: stratum 2 (top) first, then 3, 4, ...
+  for (let s = 2; s <= maxS && cardsLeft > 0; s++) {
+    const total = allPips.filter(v => v === s).length;
+    if (total === 0) continue;
+    const cityCount = cp.filter(v => v === s).length;
+    const draw = Math.min(cardsLeft, total);
+    const lp = logC(total - cityCount, draw) - logC(total, draw);
+    pNoCity *= isFinite(lp) ? Math.exp(lp) : 0;
+    cardsLeft -= draw;
+  }
+
+  // Remaining draws come from unseen pile
+  if (cardsLeft > 0) {
+    const U = allPips.filter(v => v === 0).length;
+    const u = cp.filter(v => v === 0).length;
+    if (U > 0) {
+      const lp = logC(U - u, cardsLeft) - logC(U, cardsLeft);
+      pNoCity *= isFinite(lp) ? Math.exp(lp) : 0;
+    }
+  }
+
+  return Math.max(0, Math.min(1, 1 - pNoCity));
+}
+
+function epidemicProb() {
+  const E       = setup.totalEpidemics;
+  const epiDone = setup.epidemicsDrawn;
+  if (epiDone >= E) return 0;
+
+  const N    = setup.totalCards;
+  const drawn = setup.cardsDrawn;
+  const K    = Math.min(2, N - drawn);
+  if (K <= 0) return 0;
+
+  // Pile sizes: distribute N cards as evenly as possible across E piles,
+  // larger piles first (top of deck). floor(N/E) or floor(N/E)+1 per pile.
+  const base     = Math.floor(N / E);
+  const numLarge = N % E; // first numLarge piles get base+1 cards
+
+  // Find which pile we're currently drawing from
+  let cumulative = 0;
+  let pileIndex  = E - 1; // fallback: last pile
+  for (let i = 0; i < E; i++) {
+    const ps = i < numLarge ? base + 1 : base;
+    if (drawn < cumulative + ps) { pileIndex = i; break; }
+    cumulative += ps;
+  }
+
+  const posInPile = drawn - cumulative;
+  const pileSize  = pileIndex < numLarge ? base + 1 : base;
+
+  // Current pile still has its epidemic iff we haven't drawn more epidemics
+  // than the number of piles fully behind us (each prior pile = 1 epidemic).
+  const currentHasEpidemic = (epiDone === pileIndex);
+
+  // Multiply P(no epidemic) across each pile we draw from this turn
+  let pNoEpi   = 1;
+  let cardsLeft = K;
+  let pi        = pileIndex;
+  let rem       = pileSize - posInPile;
+  let hasEpi    = currentHasEpidemic;
+
+  while (cardsLeft > 0 && pi < E) {
+    const take = Math.min(cardsLeft, rem);
+    if (hasEpi) pNoEpi *= (rem - take) / rem;
+    cardsLeft -= take;
+    pi++;
+    if (pi < E) { rem = pi < numLarge ? base + 1 : base; hasEpi = true; }
+  }
+
+  return Math.max(0, 1 - pNoEpi);
+}
+
+function turnsToNew() {
+  let P = 0;
+  cities.forEach(c => (pips[c.id]||[]).forEach(v => { if(v>=2) P++; }));
+  if (P === 0) return 0;
+  const R = RATES[Math.min(setup.epidemicsDrawn, RATES.length-1)];
+  return Math.ceil(P / R);
+}
+
+// ── Render ────────────────────────────────────────────────────────
+
+function renderAll() {
+  document.getElementById('turn-num').textContent = setup.turn;
+  document.getElementById('inp-players').value    = setup.players;
+  document.getElementById('inp-cards').value      = setup.totalCards;
+  document.getElementById('inp-epis').value       = setup.totalEpidemics;
+  renderStats();
+  renderCities();
+  renderBox6();
+}
+
+function renderStats() {
+  const R    = RATES[Math.min(setup.epidemicsDrawn, RATES.length-1)];
+  const ep   = epidemicProb();
+  const t    = turnsToNew();
+
+  document.getElementById('st-rate').textContent = R;
+  document.getElementById('st-epi').textContent  = `${setup.epidemicsDrawn} / ${setup.totalEpidemics}`;
+  document.getElementById('st-new').textContent  = t === 0 ? 'Now' : `${t} turn${t===1?'':'s'}`;
+
+  const el  = document.getElementById('st-pepi');
+  el.textContent = `${(ep * 100).toFixed(1)}%`;
+  el.className   = 'stat-val ' + (ep > .4 ? 'col-high' : ep > .2 ? 'col-mid' : 'col-low');
+}
+
+function renderCities() {
+  const grid = document.getElementById('city-grid');
+  grid.innerHTML = '';
+  const LABELS = { yellow:'Yellow Cities', blue:'Blue Cities', black:'Black Cities', red:'Red Cities' };
+
+  ['yellow','blue','black','red'].forEach(color => {
+    const cc = cities.filter(c => c.color === color)
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    if (!cc.length) return;
+    const sec = document.createElement('div');
+    sec.className = `section ${color}`;
+
+    const allP = cc.flatMap(c => pips[c.id]||[]);
+    const cur  = allP.filter(v=>v===1).length;
+    const prv  = allP.filter(v=>v>=2).length;
+
+    sec.innerHTML = `
+      <div class="sec-head">
+        <div class="sec-title">${LABELS[color]}</div>
+        <div class="sec-count">${cur} now · ${prv} prev</div>
+      </div>`;
+
+    cc.forEach(city => {
+      const cp    = pips[city.id] || Array(city.count).fill(0);
+      const prob  = cityProb(city.id);
+      const pct   = Math.round(prob * 100);
+      const pillCls = prob === 0 ? 'odds-zero' : prob > .4 ? 'odds-high' : prob > .15 ? 'odds-mid' : 'odds-low';
+
+      const row = document.createElement('div');
+      row.className = 'city-row';
+
+      const pipsHtml = cp.map((ps,i) =>
+        `<div class="pip ${ps===-1?'inoc':ps===1?'cur':ps>=2?'prv':''}" onclick="clickPip('${city.id}',${i})"></div>`
+      ).join('');
+
+      const canInoc = cp.some(v => v !== -1);
+      row.innerHTML = `
+        <span class="c-name">${city.name}</span>
+        <div class="pips">${pipsHtml}</div>
+        ${canInoc ? `<button class="inoc-btn" onclick="inoculate('${city.id}')">+Box 6</button>` : ''}
+        <span class="odds-pill ${pillCls}">${pct}%</span>`;
+      sec.appendChild(row);
+    });
+    grid.appendChild(sec);
+  });
+}
+
+function renderBox6() {
+  const el = document.getElementById('box6-section');
+  const inoc = cities
+    .map(c => ({ city: c, count: (pips[c.id]||[]).filter(v=>v===-1).length }))
+    .filter(x => x.count > 0)
+    .sort((a,b) => a.city.name.localeCompare(b.city.name));
+
+  if (!inoc.length) { el.style.display = 'none'; return; }
+
+  const total = inoc.reduce((s,x) => s + x.count, 0);
+  const tags  = inoc.map(x =>
+    `<span class="box6-tag ${x.city.color}">${x.city.name}${x.count > 1 ? ` ×${x.count}` : ''}</span>`
+  ).join('');
+
+  el.style.display = '';
+  el.innerHTML = `<div class="box6-title">Box 6 — ${total} card${total===1?'':'s'}</div><div class="box6-list">${tags}</div>`;
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+
+wsConnect();
+renderAll();
+</script>
+</body>
+</html>

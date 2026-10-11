@@ -1,0 +1,13 @@
+{
+  "name": "pandemic-tracker",
+  "version": "1.0.0",
+  "description": "Shared Pandemic Season 2 infection card tracker",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "ws": "^8.16.0"
+  }
+}

@@ -1,0 +1,29 @@
+services:
+  pandemic-tracker:
+    image: ghcr.io/chelming/pandemic-tracker:${TAG:-latest}
+    container_name: pandemic-tracker
+    restart: unless-stopped
+    volumes:
+      - pandemic_data:/data
+    environment:
+      - PORT=${PORT:-3000}
+      - STATE_FILE=${STATE_FILE:-/data/state.json}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pandemic.rule=Host(`${PANDEMIC_HOST}`)"
+      - "traefik.http.routers.pandemic.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.pandemic.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      - "traefik.http.services.pandemic.loadbalancer.server.port=${PORT:-3000}"
+      # WebSocket support — required for live sync
+      - "traefik.http.middlewares.pandemic-ws.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.routers.pandemic.middlewares=pandemic-ws"
+    networks:
+      - traefik
+
+volumes:
+  pandemic_data:
+
+networks:
+  traefik:
+    name: ${TRAEFIK_NETWORK:-traefik_proxy}
+    external: true
